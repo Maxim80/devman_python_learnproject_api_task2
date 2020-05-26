@@ -6,9 +6,16 @@ from terminaltables import AsciiTable
 
 #********** headhunter api functions **********
 
-def get_response_hh(position, page=0):
+def get_response_from_api_hh(position, page=0):
     """
-    Function for receiving requests from api HeadHunter (api.hh.ru).
+    Parameters
+    position: str
+        job search position
+    page: int
+        page number
+
+    Return
+        dict: answer from HeadHunter API as dictionary
     """
     base_url = 'https://api.hh.ru/vacancies/'
     params = {
@@ -22,33 +29,20 @@ def get_response_hh(position, page=0):
     return response.json()
 
 
-def predict_rub_salary_hh(vacancy):
-    """
-    The function considers the average salary for a vacancy received
-    from api headhunter.
-    """
-    if vacancy['salary'] != None and vacancy['salary']['currency'] == 'RUR':
-        if vacancy['salary']['from'] != None and vacancy['salary']['to'] != None:
-            return (vacancy['salary']['from'] + vacancy['salary']['to']) / 2
-
-        if vacancy['salary']['from'] != None and vacancy['salary']['to'] == None:
-            return vacancy['salary']['from'] * 1.2
-
-        if vacancy['salary']['from'] == None and vacancy['salary']['to'] != None:
-            return vacancy['salary']['to'] * 0.8
-
-    return None
-
-
 def get_vacancies_hh(position):
     """
-    Function receives all vacancies using pagination.
+    Parameters
+    position: str
+        job searc
+
+    Return
+        list: all vacancies list
     """
     vacancies = []
     page = 0
     pages = 1
     while page < pages:
-        response = get_response_hh(position, page)
+        response = get_response_from_api_hh(position, page)
         vacancies.extend(response['items'])
         page += 1
         pages = response['pages']
@@ -56,11 +50,49 @@ def get_vacancies_hh(position):
     return vacancies
 
 
+def get_expected_salaries_hh(vacancies):
+    """
+    Parameters
+    vacancies: list
+        all vacancies list
+
+    Return
+        list: list of expected vacancies
+        [
+            {'from': 100000, 'to': 180000, 'currency': 'RUR', 'gross': False},
+            {'from': 60000, 'to': 120000, 'currency': 'RUR', 'gross': False},
+            ...
+            ...
+        ]
+    """
+    expected_salaries = []
+    for vacancy in vacancies:
+        if vacancy['salary'] and vacancy['salary']['currency'] == 'RUR':
+            expected_salary = {
+                'from': vacancy['salary']['from'],
+                'to': vacancy['salary']['to'],
+                'currency': vacancy['salary']['currency'],
+                'gross': vacancy['salary']['gross'],
+            }
+            expected_salaries.append(expected_salary)
+
+    return expected_salaries
+
+
 #********** superjob api functions **********
 
-def get_response_sj(position, auth_token, page=0):
+def get_response_from_api_sj(position, auth_token, page=0):
     """
-    Function for receiving requests from api SuperJob (api.superjob.ru).
+    Parameters
+    position: str
+        job search position
+    auth_token: str
+        authentication token
+    page: int
+        page number
+
+    Return
+        dict: answer from SuperJob API as dictionary
     """
     base_url = 'https://api.superjob.ru/2.0/vacancies/'
     headers = {
@@ -77,33 +109,22 @@ def get_response_sj(position, auth_token, page=0):
     return response.json()
 
 
-def predict_rub_salary_sj(vacancy):
+def get_vacancies_sj(position, auth_token):
     """
-    The function considers the average salary for a vacancy received
-    from api superjob.
-    """
-    if vacancy['payment'] == None:
-        return None
-    else:
-        if vacancy['payment_from'] != 0 and vacancy['payment_to'] != 0:
-            return vacancy['payment_from'] + vacancy['payment_to'] / 2
+    Parameters
+    position: str
+        job searc
+    auth_token: str
+        authentication token
 
-        if vacancy['payment_from'] != 0 and vacancy['payment_to'] == 0:
-            return vacancy['payment_from'] * 1.2
-
-        if vacancy['payment_from'] == 0 and vacancy['payment_to'] != 0:
-            return vacancy['payment_to'] * 0.8
-
-
-def get_vacansies_sj(position, auth_token):
-    """
-    Function receives all vacancies using pagination.
+    Return
+        list: all vacancies list
     """
     vacancies = []
     page = 0
     more = True
     while more:
-        response = get_response_sj(position, auth_token, page)
+        response = get_response_from_api_sj(position, auth_token, page)
         vacancies.extend(response['objects'])
         page += 1
         more = response['more']
@@ -111,31 +132,100 @@ def get_vacansies_sj(position, auth_token):
     return vacancies
 
 
+def get_expected_salaries_sj(vacancies):
+    """
+    Parameters
+    vacancies: list
+        all vacancies list
+
+    Return
+        list: list of expected vacancies
+        [
+            {'from': 100000, 'to': 180000, 'currency': 'RUR', 'gross': False},
+            {'from': 60000, 'to': 120000, 'currency': 'RUR', 'gross': False},
+            ...
+            ...
+        ]
+    """
+    expected_salaries = []
+    for vacancy in vacancies:
+        if vacancy['currency'] == 'rub':
+            expected_salary = {
+                'from': vacancy['payment_from'],
+                'to': vacancy['payment_to'],
+                'currency': vacancy['currency'],
+                'gross': None,
+            }
+            expected_salaries.append(expected_salary)
+
+    return expected_salaries
+
+
 #********** common functions **********
 
 
-def get_position_statistics(position, vacancies, func):
+def predict_rub_salary(expected_salary):
     """
-    The function receives a list of all vacancies by line item
-    and calculates statistics:
-    found vacancies, processed vacancies, average salary.
+    Parameters
+    expected_salary: dict
+        dictionary with expected salary
+
+    Return
+        float: predicted salary
     """
-    vacancies_found = len(vacancies)
-    vacancies_processed = 0
+    if expected_salary['from'] != None and expected_salary['to'] != None:
+        return (expected_salary['from'] + expected_salary['to']) / 2
+
+    if expected_salary['from'] != None and expected_salary['to'] == None:
+        return expected_salary['from'] * 1.2
+
+    if expected_salary['from'] == None and expected_salary['to'] != None:
+        return expected_salary['to'] * 0.8
+
+
+def get_average_salary(expected_salaries):
+    """
+    Parameters
+    expected_salaries: list
+        list of expected salaries
+
+    Return
+        average_salary: int, average salary for all vacancies
+        vacancies_processed: int, number of vacancies processed
+    """
     total_salary = 0
-    for vacancy in vacancies:
-        projected_salary = func(vacancy)
-        if projected_salary:
-            vacancies_processed += 1
-            total_salary += projected_salary
+    for expected_salary in expected_salaries:
+        total_salary += predict_rub_salary(expected_salary)
 
-    if vacancies_processed == 0:
-        average_salary = 0
-    else:
-        average_salary = int(total_salary / vacancies_processed)
+    vacancies_processed = len(expected_salaries)
+    average_salary = int(total_salary / vacancies_processed)
 
+    return average_salary, vacancies_processed
+
+
+def get_general_statistics(position, vacancies_found, expected_salaries):
+    """
+    Parameters
+    position: str
+        position for displaying statistics
+    vacancies_found: int
+        number of vacancies found
+    expected_salaries: list
+        list of expected salaries
+
+    Return
+        dict: general statistics
+        {'Python': {
+            'average_salary': 154208,
+            'vacancies_found': 1243,
+            'vacancies_processed': 235
+            }
+        }
+    """
+    average_salary, vacancies_processed = get_average_salary(expected_salaries)
+    programming_lang = position.split()[1]
     return {
-        position.split()[1]: {
+        programming_lang: {
             'vacancies_found': vacancies_found,
             'vacancies_processed': vacancies_processed,
             'average_salary': average_salary,
@@ -143,48 +233,57 @@ def get_position_statistics(position, vacancies, func):
     }
 
 
-def print_terminal_table(data, title):
+def print_terminal_table(statistics, title):
     """
-    Function prints statistics in the terminal.
+    Parameters
+    statistics: dict
+        dictionary with general statistics for all vacancie
+    title: str
+        title table
+
+    Return
+        None
     """
-    table_data = [
+    table_for_print = [
         ['Язык программирования', 'Вакансий найдено', 'Вакансий обработано', 'Средняя зарплата'],
     ]
-    for key in data.keys():
-        item = []
-        item.append(key)
-        item.append(data[key]['vacancies_found'])
-        item.append(data[key]['vacancies_processed'])
-        item.append(data[key]['average_salary'])
-        table_data.append(item)
+    for programm_lang, programm_lang_stat in statistics.items():
+        stat_row = []
+        stat_row.append(programm_lang)
+        stat_row.append(programm_lang_stat['vacancies_found'])
+        stat_row.append(programm_lang_stat['vacancies_processed'])
+        stat_row.append(programm_lang_stat['average_salary'])
+        table_for_print.append(stat_row)
 
-    print(AsciiTable(table_data, title).table)
+    print(AsciiTable(table_for_print, title).table)
 
 
 #********** main **********
 
 
-def main(positions, sj_auth_token):
-    hh_data = {}
-    sj_data = {}
-    for position in positions:
-        hh_vacancies = get_vacancies_hh(position)
-        sj_vacancies = get_vacansies_sj(position, sj_auth_token)
-        hh_position_statistics = get_position_statistics(position, hh_vacancies, predict_rub_salary_hh)
-        sj_position_statistics = get_position_statistics(position, sj_vacancies, predict_rub_salary_sj)
-        hh_data.update(hh_position_statistics)
-        sj_data.update(sj_position_statistics)
-
-    print_terminal_table(hh_data, 'HeadHunter Moscow')
-    print_terminal_table(sj_data, 'SuperJob Moscow')
-
-
-if __name__ == '__main__':
+def main():
     from dotenv import load_dotenv
     load_dotenv()
 
     positions = ['Программист {}'.format(i) for i in sys.argv[1:]]
+    hh_all_statistics = {}
+    sj_all_statistics = {}
+    for position in positions:
+        hh_vacancies = get_vacancies_hh(position)
+        sj_vacancies = get_vacancies_sj(position, os.getenv('SJ_TOKEN'))
+        hh_expected_salary = get_expected_salaries_hh(hh_vacancies)
+        sj_expected_salary = get_expected_salaries_sj(sj_vacancies)
+        hh_statistics = get_general_statistics(position, len(hh_vacancies), hh_expected_salary)
+        sj_statistics = get_general_statistics(position, len(sj_vacancies), sj_expected_salary)
+        hh_all_statistics.update(hh_statistics)
+        sj_all_statistics.update(sj_statistics)
+
+    print_terminal_table(hh_all_statistics, 'HeadHunter Moscow')
+    print_terminal_table(sj_all_statistics, 'SuperJob Moscow')
+
+
+if __name__ == '__main__':
     try:
-        main(positions, os.getenv('SJ_TOKEN'))
+        main()
     except requests.exceptions.HTTPError as e:
         print(e)
