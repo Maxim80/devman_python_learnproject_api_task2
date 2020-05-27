@@ -1,10 +1,9 @@
 import requests
 import os
 import sys
+from dotenv import load_dotenv
 from terminaltables import AsciiTable
 
-
-#********** headhunter api functions **********
 
 def get_response_from_api_hh(position, page=0):
     """
@@ -78,8 +77,6 @@ def get_expected_salaries_hh(vacancies):
 
     return expected_salaries
 
-
-#********** superjob api functions **********
 
 def get_response_from_api_sj(position, auth_token, page=0):
     """
@@ -161,9 +158,6 @@ def get_expected_salaries_sj(vacancies):
     return expected_salaries
 
 
-#********** common functions **********
-
-
 def predict_rub_salary(expected_salary):
     """
     Parameters
@@ -173,14 +167,17 @@ def predict_rub_salary(expected_salary):
     Return
         float: predicted salary
     """
-    if expected_salary['from'] != None and expected_salary['to'] != None:
+    if expected_salary['from'] and expected_salary['to']:
         return (expected_salary['from'] + expected_salary['to']) / 2
 
-    if expected_salary['from'] != None and expected_salary['to'] == None:
+    elif expected_salary['from'] and not expected_salary['to']:
         return expected_salary['from'] * 1.2
 
-    if expected_salary['from'] == None and expected_salary['to'] != None:
+    elif not expected_salary['from'] and expected_salary['to']:
         return expected_salary['to'] * 0.8
+
+    else:
+        return 0
 
 
 def get_average_salary(expected_salaries):
@@ -248,29 +245,29 @@ def print_terminal_table(statistics, title):
         ['Язык программирования', 'Вакансий найдено', 'Вакансий обработано', 'Средняя зарплата'],
     ]
     for programm_lang, programm_lang_stat in statistics.items():
-        stat_row = []
-        stat_row.append(programm_lang)
-        stat_row.append(programm_lang_stat['vacancies_found'])
-        stat_row.append(programm_lang_stat['vacancies_processed'])
-        stat_row.append(programm_lang_stat['average_salary'])
-        table_for_print.append(stat_row)
+        row = [
+            programm_lang,
+            programm_lang_stat['vacancies_found'],
+            programm_lang_stat['vacancies_processed'],
+            programm_lang_stat['average_salary'],
+        ]
+        table_for_print.append(row)
 
     print(AsciiTable(table_for_print, title).table)
 
 
-#********** main **********
-
-
 def main():
-    from dotenv import load_dotenv
     load_dotenv()
-
     positions = ['Программист {}'.format(i) for i in sys.argv[1:]]
     hh_all_statistics = {}
     sj_all_statistics = {}
     for position in positions:
-        hh_vacancies = get_vacancies_hh(position)
-        sj_vacancies = get_vacancies_sj(position, os.getenv('SJ_TOKEN'))
+        try:
+            hh_vacancies = get_vacancies_hh(position)
+            sj_vacancies = get_vacancies_sj(position, os.getenv('SJ_TOKEN'))
+        except requests.exceptions.HTTPError as e:
+            print(e)
+
         hh_expected_salary = get_expected_salaries_hh(hh_vacancies)
         sj_expected_salary = get_expected_salaries_sj(sj_vacancies)
         hh_statistics = get_general_statistics(position, len(hh_vacancies), hh_expected_salary)
@@ -283,7 +280,4 @@ def main():
 
 
 if __name__ == '__main__':
-    try:
-        main()
-    except requests.exceptions.HTTPError as e:
-        print(e)
+    main()
